@@ -19,53 +19,53 @@ seq_num = 0;
 seq_num1 = 0;
 loop_start = 0;
 def parse_mdp3_packet(mdp_parser,  data, skip_fields):
-    # parse the packet header: http://www.cmegroup.com/confluence/display/EPICSANDBOX/MDP+3.0+-+Binary+Packet+Header    
+    # parse the packet header: http://www.cmegroup.com/confluence/display/EPICSANDBOX/MDP+3.0+-+Binary+Packet+Header
     global seq_num
     global loop_start
     sequence_number = unpack_from("<i", data, offset=0)[0]
     sending_time = unpack_from("<Q", data, offset=4)[0]
     # if sequence_number ==1 and loop_start == 0:
-    #     loop_start = 1        
+    #     loop_start = 1
     # elif sequence_number != 1 and loop_start == 0:
-    #     return    
+    #     return
     # elif sequence_number == 1 and loop_start == 1:
     #     sys.exit(0)
-    
-    print(':packet -  sequence_number: {} sending_time: {} '.format(sequence_number, sending_time))    
-    # try:       
+
+    print(':packet -  sequence_number: {} sending_time: {} '.format(sequence_number, sending_time))
+    # try:
     #     if seq_num > 0:
-    #         if((seq_num +1) != sequence_number):                
-    #             sys.exit(0)        
-    #     seq_num = sequence_number;         
+    #         if((seq_num +1) != sequence_number):
+    #             sys.exit(0)
+    #     seq_num = sequence_number;
     #     print(sequence_number);
     # except Exception as e:
     #     print e;
-    #     raise           
+    #     raise
     for mdp_message in mdp_parser.parse(data, offset=12):
         checker = False;
         # if mdp_message.template_id.value == 32 or mdp_message.template_id.value == 42 or mdp_message.template_id.value == 38 :
-        #     checker = True;        
+        #     checker = True;
         # if mdp_message.template_id.value == 38:
         #      checker = False;
         # if mdp_message.template_id.value == 38:
         #     security_id = mdp_message.security_id.value
         #     if 160078 == security_id:
         #          checker = True;
-        if mdp_message.template_id.value == 32 or mdp_message.template_id.value == 42 or mdp_message.template_id.value == 43:        
+        if mdp_message.template_id.value == 32 or mdp_message.template_id.value == 42 or mdp_message.template_id.value == 43:
             for md_entry in mdp_message.no_md_entries:
-                security_id = md_entry.security_id.value                
+                security_id = md_entry.security_id.value
                 if 66404 == security_id:
-                    checker = True                
-                # if md_entry.md_entry_type.value not in ['Bid', 'Offer']:            
-                #     checker = False  
-        if mdp_message.template_id.value == 36:        
-            checker = True             
+                    checker = True
+                # if md_entry.md_entry_type.value not in ['Bid', 'Offer']:
+                #     checker = False
+        if mdp_message.template_id.value == 36:
+            checker = True
         checker = True
-        # if mdp_message.template_id.value == 12:        
+        # if mdp_message.template_id.value == 12:
         #    checker = False
-        if checker == True:          
-            print('=======================================================================================') 
-            print(':packet -  sequence_number: {} sending_time: {} '.format(sequence_number, sending_time))    
+        if checker == True:
+            print('=======================================================================================')
+            print(':packet -  sequence_number: {} sending_time: {} '.format(sequence_number, sending_time))
             message_fields = ''
             for field in mdp_message.fields:
                 if field.name not in skip_fields:
@@ -119,11 +119,11 @@ def process_raw_file(args, filename):
                 # print(chunk_size)
                 chunk = file.read(chunk_size)
                 try:
-                    parse_mdp3_packet(mdp_parser, chunk, skip_fields)                                        
+                    parse_mdp3_packet(mdp_parser, chunk, skip_fields)
                 except Exception:
                     print('could not parse packet number {}'.format(packet_number))
             else:
-                break;   
+                break;
 
 
 
