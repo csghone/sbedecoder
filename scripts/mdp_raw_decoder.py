@@ -23,6 +23,7 @@ import subprocess
 import traceback
 import progressbar
 
+
 if __name__ == "__main__":
     # Logging setup
     logger = logging.getLogger()
@@ -49,7 +50,7 @@ def setup_logging(level=logging.ERROR):
 
 
 class MDP3Parser:
-    def __init__(self, schema):
+    def __init__(self, schema, out_file_handle=sys.stdout):
         self.seq_num = 0
         # Read in the schema xml as a dictionary and
         # construct the various schema objects
@@ -57,6 +58,7 @@ class MDP3Parser:
         mdp_schema.parse(schema)
         msg_factory = SBEMessageFactory(mdp_schema)
         self.mdp_parser = SBEParser(msg_factory)
+        self.out_file_handle = out_file_handle
         # self.loop_start = 0
 
     def handle_repeating_groups(self, group_container, msg_version, indent,
@@ -64,8 +66,12 @@ class MDP3Parser:
         for group in group_container.groups:
             if group.since_version > msg_version:
                 continue
-            print(':::{} - num_groups: {}'.format(group.name, group.num_groups))
-            for group_field in group.repeating_groups:
+            print(
+                ":::{} - num_groups: {}".format(group.name,
+                                                group.num_groups),
+                file=self.out_file_handle
+            )
+            for index, group_field in enumerate(group.repeating_groups):
                 group_fields = ""
                 for group_field in group_field.fields:
                     if group_field.since_version > msg_version:
@@ -80,7 +86,8 @@ class MDP3Parser:
                                 security_id, symbol)
                             continue
                     group_fields += str(group_field)
-                print("::::{}".format(group_fields))
+                print(":::: {}{}".format(index, group_fields),
+                      file=self.out_file_handle)
             self.handle_repeating_groups(
                 group,
                 msg_version,
@@ -97,24 +104,6 @@ class MDP3Parser:
 
         sequence_number = unpack_from("<i", data, offset=0)[0]
         sending_time = unpack_from("<Q", data, offset=4)[0]
-        # if sequence_number ==1 and loop_start == 0:
-        #     loop_start = 1
-        # elif sequence_number != 1 and loop_start == 0:
-        #     return
-        # elif sequence_number == 1 and loop_start == 1:
-        #     sys.exit(0)
-
-        # print(seq_num_str.format(sequence_number, sending_time))
-
-        # try:
-        #     if seq_num > 0:
-        #         if((seq_num +1) != sequence_number):
-        #             sys.exit(0)
-        #     seq_num = sequence_number;
-        #     print(sequence_number);
-        # except Exception as e:
-        #     print e;
-        #     raise
 
         template_id_filter = [32, 42, 43]
         for mdp_message in self.mdp_parser.parse(data, offset=12):
@@ -138,10 +127,11 @@ class MDP3Parser:
             if not checker:
                 continue
 
-            print(token_filter, checker)
-            print("=" * 90)
-            print(seq_num_str.format(sequence_number, sending_time))
-            print("::{} -{}\n".format(mdp_message, message_fields))
+            print("=" * 90, file=self.out_file_handle)
+            print(seq_num_str.format(sequence_number, sending_time),
+                  file=self.out_file_handle)
+            print("::{} -{}\n".format(mdp_message, message_fields),
+                  file=self.out_file_handle)
 
             try:
                 # Code for older version
@@ -151,13 +141,15 @@ class MDP3Parser:
                         ":::{} - num_groups: {}\n".format(
                             iterator.name,
                             iterator.num_groups
-                        )
+                        ),
+                        file=self.out_file_handle
                     )
                     group_fields = ""
                     for index, group in enumerate(iterator):
                         for group_field in group.fields:
                             group_fields += "\n    " + str(group_field)
-                        print('::::{}'.format(group_fields))
+                        print(':::: {}{}'.format(index, group_fields),
+                              file=self.out_file_handle)
             except:
                 self.handle_repeating_groups(
                     mdp_message,
@@ -185,7 +177,12 @@ def process_raw_file(args):
     else:
         file_handle = open(filename, "rb")
 
-    mdp3_parser = MDP3Parser(args.schema)
+    if args.output_file == "-":
+        out_file_handle = sys.stdout
+    else:
+        out_file_handle = open(args.output_file, "w+")
+    mdp3_parser = MDP3Parser(args.schema,
+                             out_file_handle=out_file_handle)
 
     file_size = os.stat(filename).st_size
     bar = progressbar.ProgressBar()
@@ -232,6 +229,13 @@ def process_command_line():
         "--input",
         dest="input_file",
         help="Input file to process"
+    )
+
+    parser.add_argument(
+        "--output",
+        dest="output_file",
+        default="out.log",
+        help="Output file"
     )
 
     parser.add_argument(
