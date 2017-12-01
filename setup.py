@@ -12,5 +12,5 @@ setup(
     packages=['sbedecoder', 'mdp', 'mdp.orderbook'],
     scripts=['scripts/mdp_decoder.py', 'scripts/mdp_book_builder.py'],
     long_description='see https://github.com/tfgm/sbedecoder/INSTALL.md',
-    install_requires=['dpkt', 'lxml', 'nose', 'mako', 'autopep8'],
+    install_requires=['dpkt', 'lxml', 'nose', 'mako', 'autopep8', 'progressbar2'],
 )
