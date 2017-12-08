@@ -8,7 +8,7 @@ Parse a pcap file containing CME MDP3 market data based on a SBE xml schema file
 
 import argparse
 import sys
-import os.path
+import os
 from struct import unpack
 from struct import unpack_from
 from datetime import datetime
@@ -188,14 +188,22 @@ def process_raw_file(args):
     bar = progressbar.ProgressBar()
     while True:
         bar_val = 100.0 * float(file_handle.tell()) / file_size
+        if bar_val > 100.0:
+            bar_val = 100
         bar.update(bar_val)
+        if bar_val == 100:
+            break
 
         timestamp_count_bytes = file_handle.read(1)
+        if timestamp_count_bytes is None:
+            break
         timestamp_count, = unpack('B', timestamp_count_bytes)
         logger.debug("Timestamp byte length: %s", str(timestamp_count))
 
         for i in range(0, timestamp_count):
             timestamps_bytes = file_handle.read(8)
+            if timestamps_bytes is None:
+                break
             timestamp, = unpack('L', timestamps_bytes)
             logger.debug("Timestamp: %s", str(timestamp))
 
@@ -215,6 +223,7 @@ def process_raw_file(args):
         else:
             break
 
+    bar.finish()
     file_handle.close()
     return ret_val
 
@@ -228,7 +237,8 @@ def process_command_line():
     parser.add_argument(
         "--input",
         dest="input_file",
-        help="Input file to process"
+        help="Input file to process",
+        required=True
     )
 
     parser.add_argument(
@@ -241,7 +251,7 @@ def process_command_line():
     parser.add_argument(
         "--schema",
         dest="schema",
-        default='templates_FixBinary.xml',
+        default="templates_FixBinary.xml",
         help="Path to SBE schema xml file"
     )
 
