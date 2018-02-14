@@ -230,11 +230,11 @@ def process_raw_file(args):
 
 def process_command_line():
     parser = argparse.ArgumentParser(
-        description="Parse CME MDP3 market data",
-        version="0.2"
+        description="Parse CME MDP3 market data"
     )
 
     parser.add_argument(
+        "-i",
         "--input",
         dest="input_file",
         help="Input file to process",
@@ -242,6 +242,7 @@ def process_command_line():
     )
 
     parser.add_argument(
+        "-o",
         "--output",
         dest="output_file",
         default="out.log",
@@ -249,6 +250,7 @@ def process_command_line():
     )
 
     parser.add_argument(
+        "-s",
         "--schema",
         dest="schema",
         default="templates_FixBinary.xml",
