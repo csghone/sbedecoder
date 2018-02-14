@@ -85,7 +85,7 @@ class MDP3Parser:
                             group_fields += "security_id: {} [{}]".format(
                                 security_id, symbol)
                             continue
-                    group_fields += str(group_field)
+                    group_fields += group_field.__str__(raw=True)
                 print(":::: {}{}".format(index, group_fields),
                       file=self.out_file_handle)
             self.handle_repeating_groups(
@@ -97,40 +97,44 @@ class MDP3Parser:
             )
 
 
-    def parse_packet(self, data, skip_fields=[], token_filter=[]):
-        seq_num_str = ":packet => sequence_number: {} sending_time: {}"
+    def parse_packet(self, data, skip_fields=[], token_filter=[], enable_trade_only=False):
+        seq_num_str = ":packet => sequence_number: {} sending_time: {} size: {}"
         # Parse the packet header:
         # http://www.cmegroup.com/confluence/display/EPICSANDBOX/MDP+3.0+-+Binary+Packet+Header
 
         sequence_number = unpack_from("<i", data, offset=0)[0]
         sending_time = unpack_from("<Q", data, offset=4)[0]
 
+        print("=" * 90, file=self.out_file_handle)
+        print(seq_num_str.format(sequence_number, sending_time, len(data)),
+              file=self.out_file_handle)
         template_id_filter = [32, 42, 43]
         for mdp_message in self.mdp_parser.parse(data, offset=12):
             template_val = mdp_message.template_id.value
-            if template_val not in template_id_filter:
+            if enable_trade_only and template_val not in template_id_filter:
                 continue
 
             checker = False
-            if not token_filter:
+            if not enable_trade_only:
                 checker = True
-            for md_entry in mdp_message.no_md_entries:
-                security_id = md_entry.security_id.value
-                if token_filter is not None and security_id in token_filter:
-                    checker = True
+            if enable_trade_only:
+                for md_entry in mdp_message.no_md_entries:
+                    security_id = md_entry.security_id.value
+                    if token_filter is not None and security_id in token_filter:
+                        checker = True
 
             message_fields = ""
             for field in mdp_message.fields:
                 if field.name not in skip_fields:
-                    message_fields += "\n  " + str(field)
+                    message_fields += "\n  " + field.__str__(raw=True)
 
             if not checker:
                 continue
 
-            print("=" * 90, file=self.out_file_handle)
-            print(seq_num_str.format(sequence_number, sending_time),
+            print("-" * 90, file=self.out_file_handle)
+            print("::{} -{}".format(mdp_message, message_fields),
                   file=self.out_file_handle)
-            print("::{} -{}\n".format(mdp_message, message_fields),
+            print("  size: {}\n  template_id: {}\n".format(mdp_message.message_size.value, template_val),
                   file=self.out_file_handle)
 
             try:
@@ -147,7 +151,7 @@ class MDP3Parser:
                     group_fields = ""
                     for index, group in enumerate(iterator):
                         for group_field in group.fields:
-                            group_fields += "\n    " + str(group_field)
+                            group_fields += "\n    " + group_field.__str__(raw=True)
                         print(':::: {}{}'.format(index, group_fields),
                               file=self.out_file_handle)
             except:
@@ -213,7 +217,7 @@ def process_raw_file(args):
             logger.debug("Chunk size: %d", chunk_size)
             chunk = file_handle.read(chunk_size)
             try:
-                mdp3_parser.parse_packet(chunk, skip_fields, token_filter)
+                mdp3_parser.parse_packet(chunk, skip_fields=skip_fields, token_filter=token_filter)
             except Exception as error:
                 exc_mesg = traceback.format_exc()
                 logger.error("\n%s", exc_mesg)
