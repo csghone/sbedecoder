@@ -23,6 +23,7 @@ import subprocess
 import traceback
 import progressbar
 
+GLOBAL_MESSAGE_COUNT = 0
 
 if __name__ == "__main__":
     # Logging setup
@@ -110,6 +111,8 @@ class MDP3Parser:
               file=self.out_file_handle)
         template_id_filter = [32, 42, 43]
         for mdp_message in self.mdp_parser.parse(data, offset=12):
+            global GLOBAL_MESSAGE_COUNT
+            GLOBAL_MESSAGE_COUNT += 1
             template_val = mdp_message.template_id.value
             if enable_trade_only and template_val not in template_id_filter:
                 continue
@@ -227,6 +230,7 @@ def process_raw_file(args):
         else:
             break
 
+    print("Total messages: ", GLOBAL_MESSAGE_COUNT)
     bar.finish()
     file_handle.close()
     return ret_val
