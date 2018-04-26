@@ -181,8 +181,6 @@ def process_raw_file(args):
 
     if filename.endswith(".gz"):
         file_handle = gzip.open(filename, "rb")
-        print("ProgressBar will be inaccurate for GZIP files.")
-        print("It will go from 0-100 multiple times as per compression factor.")
     else:
         file_handle = open(filename, "rb")
 
@@ -196,12 +194,11 @@ def process_raw_file(args):
     file_size = os.stat(filename).st_size
     bar = progressbar.ProgressBar()
     while True:
-        bar_val = 100.0 * float(file_handle.tell()) / file_size
-        while True:
-            if bar_val < 100.0:
-                break
-            if bar_val > 100.0:
-                bar_val = (bar_val - 100)
+        if filename.endswith(".gz"):
+            ftell = file_handle.fileobj.tell()
+        else:
+            ftell = file_handle.tell()
+        bar_val = 100.0 * ftell / file_size
         bar.update(bar_val)
 
         timestamp_count_bytes = file_handle.read(1)
