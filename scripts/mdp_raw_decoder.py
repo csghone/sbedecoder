@@ -23,6 +23,7 @@ import subprocess
 import traceback
 import progressbar
 
+GLOBAL_PACKET_COUNT = 0
 GLOBAL_MESSAGE_COUNT = 0
 
 if __name__ == "__main__":
@@ -110,6 +111,8 @@ class MDP3Parser:
         print(seq_num_str.format(sequence_number, sending_time, len(data)),
               file=self.out_file_handle)
         template_id_filter = [32, 42, 43]
+        global GLOBAL_PACKET_COUNT
+        GLOBAL_PACKET_COUNT += 1
         for mdp_message in self.mdp_parser.parse(data, offset=12):
             global GLOBAL_MESSAGE_COUNT
             GLOBAL_MESSAGE_COUNT += 1
@@ -231,6 +234,7 @@ def process_raw_file(args):
         else:
             break
 
+    print("Total packets:  ", GLOBAL_PACKET_COUNT)
     print("Total messages: ", GLOBAL_MESSAGE_COUNT)
     bar.finish()
     file_handle.close()
