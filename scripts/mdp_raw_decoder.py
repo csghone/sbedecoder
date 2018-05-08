@@ -3,7 +3,8 @@
 from __future__ import print_function
 
 """
-Parse a pcap file containing CME MDP3 market data based on a SBE xml schema file.
+Parse PCAP or custom archival packets containing MDP3 data
+and print in custom output format
 """
 
 import argparse
@@ -52,7 +53,7 @@ def setup_logging(level=logging.ERROR):
 
 
 class MDP3Parser:
-    def __init__(self, schema, out_file_handle=sys.stdout):
+    def __init__(self, schema, out_file_handle=sys.stdout, ignore_messages=False):
         self.seq_num = 0
         # Read in the schema xml as a dictionary and
         # construct the various schema objects
@@ -61,7 +62,7 @@ class MDP3Parser:
         msg_factory = SBEMessageFactory(mdp_schema)
         self.mdp_parser = SBEParser(msg_factory)
         self.out_file_handle = out_file_handle
-        # self.loop_start = 0
+        self.ignore_messages = ignore_messages
 
     def handle_repeating_groups(self, group_container, msg_version, indent,
                                 skip_fields=[], secdef=None):
@@ -113,6 +114,8 @@ class MDP3Parser:
         template_id_filter = [32, 42, 43]
         global GLOBAL_PACKET_COUNT
         GLOBAL_PACKET_COUNT += 1
+        if self.ignore_messages:
+            return
         for mdp_message in self.mdp_parser.parse(data, offset=12):
             global GLOBAL_MESSAGE_COUNT
             GLOBAL_MESSAGE_COUNT += 1
@@ -192,7 +195,8 @@ def process_raw_file(args):
     else:
         out_file_handle = open(args.output_file, "w+")
     mdp3_parser = MDP3Parser(args.schema,
-                             out_file_handle=out_file_handle)
+                             out_file_handle=out_file_handle,
+                             ignore_messages=args.ignore_messages)
 
     file_size = os.stat(filename).st_size
     bar = progressbar.ProgressBar()
@@ -223,19 +227,83 @@ def process_raw_file(args):
             logger.debug("Chunk size: %d", chunk_size)
             chunk = file_handle.read(chunk_size)
             try:
-                mdp3_parser.parse_packet(chunk, skip_fields=skip_fields, token_filter=token_filter)
+                mdp3_parser.parse_packet(chunk,
+                                         skip_fields=skip_fields,
+                                         token_filter=token_filter)
             except Exception as error:
                 exc_mesg = traceback.format_exc()
                 logger.error("\n%s", exc_mesg)
                 logger.error("Error %s", error)
-                logger.error("We are most likely at end of file")
-                ret_val = -1
+                if bar_val < 99.0:
+                    ret_val = -1
+                else:
+                    logger.error("We are most likely at end of file")
                 break
         else:
             break
 
     print("Total packets:  ", GLOBAL_PACKET_COUNT)
-    print("Total messages: ", GLOBAL_MESSAGE_COUNT)
+    if not args.ignore_messages:
+        print("Total messages: ", GLOBAL_MESSAGE_COUNT)
+    bar.finish()
+    file_handle.close()
+    return ret_val
+
+def process_pcap_file(args):
+    ret_val = 0
+    filename = args.input_file
+    skip_fields = args.skip_fields.split(',')
+    token_filter = args.token_filter.split(',')
+    if token_filter == [""]:
+        token_filter = []
+    if args.output_file == "-":
+        out_file_handle = sys.stdout
+    else:
+        out_file_handle = open(args.output_file, "w+")
+    mdp3_parser = MDP3Parser(args.schema,
+                             out_file_handle=out_file_handle,
+                             ignore_messages=args.ignore_messages)
+
+    if filename.endswith('.gz'):
+        file_handle = gzip.open(filename, 'rb')
+    else:
+        file_handle = open(filename, 'rb')
+
+    pcap_reader = dpkt.pcap.Reader(file_handle)
+    packet_number = 0
+    file_size = os.stat(filename).st_size
+    bar = progressbar.ProgressBar()
+    for ts, packet in pcap_reader:
+        if filename.endswith(".gz"):
+            ftell = file_handle.fileobj.tell()
+        else:
+            ftell = file_handle.tell()
+        bar_val = 100.0 * ftell / file_size
+        bar.update(bar_val)
+
+        packet_number += 1
+        ethernet = dpkt.ethernet.Ethernet(packet)
+        if ethernet.type == dpkt.ethernet.ETH_TYPE_IP:
+            ip = ethernet.data
+            if ip.p == dpkt.ip.IP_PROTO_UDP:
+                udp = ip.data
+                try:
+                    mdp3_parser.parse_packet(udp.data,
+                                             skip_fields=skip_fields,
+                                             token_filter=token_filter)
+                except Exception as error:
+                    exc_mesg = traceback.format_exc()
+                    logger.error("\n%s", exc_mesg)
+                    logger.error("Error %s", error)
+                    if bar_val < 99.0:
+                        ret_val = -1
+                    else:
+                        logger.error("We are most likely at end of file")
+                    break
+
+    print("Total packets:  ", GLOBAL_PACKET_COUNT)
+    if not args.ignore_messages:
+        print("Total messages: ", GLOBAL_MESSAGE_COUNT)
     bar.finish()
     file_handle.close()
     return ret_val
@@ -294,6 +362,23 @@ def process_command_line():
         help="comma separated list of venue tokens to use. Default: all"
     )
 
+    parser.add_argument(
+        "-p",
+        "--pcap",
+        dest="pcap",
+        action="store_true",
+        help="Use this option in case input file is PCAP format",
+        default=False
+    )
+
+    parser.add_argument(
+        "--ignore_messages",
+        dest="ignore_messages",
+        action="store_true",
+        help="For quick analysis, skip message parsing",
+        default=False
+    )
+
     args = parser.parse_args()
 
     # check number of arguments, verify values, etc.:
@@ -310,7 +395,10 @@ def process_command_line():
 
 def main(argv=None):
     args = process_command_line()
-    return process_raw_file(args)
+    if args.pcap:
+        return process_pcap_file(args)
+    else:
+        return process_raw_file(args)
 
 
 if __name__ == '__main__':
