@@ -211,6 +211,8 @@ def process_raw_file(args):
         timestamp_count_bytes = file_handle.read(1)
         if timestamp_count_bytes is None:
             break
+        if len(timestamp_count_bytes) == 0:
+            break
         timestamp_count, = unpack('B', timestamp_count_bytes)
         logger.debug("Timestamp byte length: %s", str(timestamp_count))
 
