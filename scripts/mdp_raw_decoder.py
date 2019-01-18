@@ -105,6 +105,11 @@ class MDP3Parser:
         # Parse the packet header:
         # http://www.cmegroup.com/confluence/display/EPICSANDBOX/MDP+3.0+-+Binary+Packet+Header
 
+        global GLOBAL_PACKET_COUNT
+        GLOBAL_PACKET_COUNT += 1
+        if len(data) == 1:
+            assert data.decode() == "0"
+            return
         sequence_number = unpack_from("<i", data, offset=0)[0]
         sending_time = unpack_from("<Q", data, offset=4)[0]
 
@@ -112,8 +117,6 @@ class MDP3Parser:
         print(seq_num_str.format(sequence_number, sending_time, len(data)),
               file=self.out_file_handle)
         template_id_filter = [32, 42, 43]
-        global GLOBAL_PACKET_COUNT
-        GLOBAL_PACKET_COUNT += 1
         if self.ignore_messages:
             return
         for mdp_message in self.mdp_parser.parse(data, offset=12):
