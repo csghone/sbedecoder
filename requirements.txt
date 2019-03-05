@@ -1,0 +1,10 @@
+dpkt
+lxml
+six
+
+# if you intend to generate message templates (not necessary)
+mako
+
+# the following are for running tests
+pytest
+autopep8

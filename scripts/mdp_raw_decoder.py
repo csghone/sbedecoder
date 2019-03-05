@@ -13,8 +13,8 @@ import os
 from struct import unpack
 from struct import unpack_from
 from datetime import datetime
-from sbedecoder import SBESchema
-from sbedecoder import SBEMessageFactory
+from sbedecoder import MDPSchema
+from sbedecoder import MDPMessageFactory
 from sbedecoder import SBEParser
 import gzip
 import dpkt
@@ -57,9 +57,9 @@ class MDP3Parser:
         self.seq_num = 0
         # Read in the schema xml as a dictionary and
         # construct the various schema objects
-        mdp_schema = SBESchema()
+        mdp_schema = MDPSchema()
         mdp_schema.parse(schema)
-        msg_factory = SBEMessageFactory(mdp_schema)
+        msg_factory = MDPMessageFactory(mdp_schema)
         self.mdp_parser = SBEParser(msg_factory)
         self.out_file_handle = out_file_handle
         self.ignore_messages = ignore_messages

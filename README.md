@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/tfgm/sbedecoder.svg?branch=master)](https://travis-ci.org/tfgm/sbedecoder)
+
 Python based Simple Binary Encoding (SBE) decoder
 =================================================
 
@@ -6,45 +8,81 @@ Overview
 
 sbedecoder is a simple python package for parsing SBE encoded data.  
 
-sbedecoder dynamically generates a SBE parser from an xml description of the format. This is accomplished by
-creating an instance of SBESchema() and calling it's parse() method with a file name:
+sbedecoder dynamically generates an SBE parser from an xml description of the format. This is accomplished by
+creating an instance of `SBESchema()` and calling it's `parse()` method with a file name:
 
     from sbedecoder import SBESchema
     schema = SBESchema()
     schema.parse('path/to/schema.xml')
 
-A message parser based on this schema is created by first creating an instance of a SBEMessageFactory()
-and then creating an instance of SBEParser() using the SBEMessageFactory():
+The `SBESchema()` can be initialized with `include_message_size_header=True` if the messages being parsed
+require an extra 2 byte (unit16) framing message_size_header field (i.e. for CME MDP 3.0).
 
-    from sbedecoder import SBEMessageFactory
-    from sbedecoder import SBEParser
-    
-    message_factory = SBEMessageFactory(schema)
-    message_parser = SBEParser(message_factory)
+By default, message names are derived from the "name" field of the message definition in the schema.
+In some cases (i.e. CME MDP 3.0), the message "description" field of the message definition provides a
+more friendly name for the message. To use message descriptions as the name of the message,
+initialize your SBESchema with `use_description_as_message_name=True`.
 
-Messages are parsed from any structure that looks like a buffer containing the raw binary 
-data (buffer, str, bytearay, etc): 
+For convenience, an `MDPSchema()` subclass of `SBESchema()` is provided with `include_message_size_header=True`
+and `use_description_as_message_name=True` specifically to handle CME Group MDP 3.0 schema's.
 
-    for message in message_parser.parse(data, offset=offset):
-        process(message)
+Messages are parsed from any structure that looks like a buffer containing the raw binary
+data (buffer, str, bytearay, etc).  To parse SBE encoded data into a message based on a
+schema instance, just call `SBEMessage.parse_message()`:
 
-Note: Unless using code generation, you cannot store the messages for later processing.
+    from sbedecoder import SBEMessage
+    message = SBEMessage.parse_message(schema, msg_buffer, offset=0)
+
+`offset` is an optional parameter that indicates where within the msg_buffer the message
+starts (including the size header if the schema has `include_message_size_header` set).
+
+A parsed message is represented as an instance of the `SBEMessage()` class.  `SBEMessages()` are
+comprised of zero or more `sbedecoder.message.SBEField()` instances and zero or more
+`sbedecoder.message.SBERepeatingGroup()` instances. An `SBEField()` object can be one of a primitive
+`TypeMessageField()`, a `SetMessageField()` or an `EnumMessageField()`
+
+**Note:** Unless using code generation, you cannot store the messages for later processing.
 You must process the messages on each iteration, because the messages re-use instances of
 field objects, wrapping them around new values.
 
-A parsed message is represented as an instance of
-the SBEMessage() class.  SBEMessages are comprised of zero or more sbedecoder.message.SBEField() instances and 
-zero or more sbedecoder.message.SBERepeatingGroup() instances. An SBEField() object can be one of a primitive 
-TypeMessageField(), a SetMessageField() or an EnumMessageField()
+The CME Group sends MDP 3.0 messages in packets that include a 4 byte sequence number
+and a 8 byte timestamp.  In addition, there can be multiple messages in a single packet
+and each message is framed the with a 2 byte (unit16) message size field as mentioned above.
+
+To parse these messages, you can create a `MDPSchema()`, use that to create a
+`MDPMessageFactory()` and then create a `SBEParser()` which can then iterate over the messages in
+a packet like this:
+
+    from sbedecoder import MDPSchema
+    from sbedecoder import MDPMessageFactory
+    from sbedecoder import SBEParser
+
+    schema = SBESchema()
+    schema.parse('path/to/schema.xml')
+    message_factory = MDPMessageFactory(schema)
+    message_parser = SBEParser(message_factory)
+
+    for packet in SOME_DATASOURCE:
+       for message in message_parser.parse(packet, offset=12):
+           process(message)
+
+
+This "Message Factory" concept could easily be extended to new framing schemes by creating a new sub class of `SBEMessageFactory()`
 
 For more information on SBE, see: http://www.fixtradingcommunity.org/pg/structure/tech-specs/simple-binary-encoding.
 
 Install
 -------
 
+The sbedecoder project is available on PyPI:
+
+    pip install sbedecoder
+    
+If you are installing from source:
+
     python setup.py install
 
-**Note**: The SBE decoder has only been tested with python 2.7.  On Windows, we typically use the 
+**Note**: The SBE decoder has only been tested with python 2.7 and 3.6.  On Windows, we typically use the 
 Anaconda python distribution.  Anaconda does not distribute python's test code.  If you have 
 issues with dpkt (ImportError: No module named test), you can either install the latest dpkt 
 from source (https://github.com/kbandla/dpkt) or just comment out the import (from test import 

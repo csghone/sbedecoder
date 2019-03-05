@@ -15,13 +15,13 @@ from mdp.secdef import SecDef
 from mdp.orderbook import PacketProcessor
 from mdp.orderbook import ConsolePrinter
 
-from sbedecoder import SBESchema
-from sbedecoder import SBEMessageFactory
+from sbedecoder import MDPSchema
+from sbedecoder import MDPMessageFactory
 from sbedecoder import SBEParser
 
 
 def process_file(args, pcap_filename, security_id_filter=None, print_data=False):
-    mdp_schema = SBESchema()
+    mdp_schema = MDPSchema()
     # Read in the schema xml as a dictionary and construct the various schema objects
     try:
         from sbedecoder.generated import __messages__ as generated_messages
@@ -29,7 +29,7 @@ def process_file(args, pcap_filename, security_id_filter=None, print_data=False)
     except:
         mdp_schema.parse(args.schema)
 
-    msg_factory = SBEMessageFactory(mdp_schema)
+    msg_factory = MDPMessageFactory(mdp_schema)
     mdp_parser = SBEParser(msg_factory)
 
     secdef = SecDef()
@@ -54,7 +54,7 @@ def process_file(args, pcap_filename, security_id_filter=None, print_data=False)
                     try:
                         if print_data:
                             print('data: {}'.format(binascii.b2a_hex(data)))
-                        book_builder.handle_packet(long(ts*1000000), data)
+                        book_builder.handle_packet(int(ts*1000000), data)
                     except Exception as e:
                         print('Error decoding e:{} message:{}'.format(e, binascii.b2a_hex(data)))
 
@@ -63,8 +63,7 @@ def process_command_line():
     from argparse import ArgumentParser
 
     parser = ArgumentParser(
-        description='Parse a pcap file containing CME MDP3 market data based on a SBE xml schema file.',
-        version='0.1')
+        description='Parse a pcap file containing CME MDP3 market data based on a SBE xml schema file.')
 
     parser.add_argument('pcapfile',
         help='Name of the pcap file to process')

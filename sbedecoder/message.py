@@ -66,8 +66,8 @@ class TypeMessageField(SBEMessageField):
 
         # If this is a string type, strip any null characters
         if self.is_string_type:
-            parts = _raw_value.split('\0', 1)
-            return parts[0]
+            parts = _raw_value.split(b'\0', 1)
+            return parts[0].decode('UTF-8')
 
         return _raw_value
 
@@ -103,7 +103,7 @@ class SetMessageField(SBEMessageField):
         _raw_value = self.raw_value
         _value = ''
         _num_values = 0
-        for i in xrange(self.field_length*8):
+        for i in range(self.field_length*8):
             bit_set = 1 & (_raw_value >> i)
             if bit_set:
                 if _num_values > 0:
@@ -131,7 +131,7 @@ class EnumMessageField(SBEMessageField):
         self.field_offset = field_offset
         self.enum_values = enum_values
         self.field_length = field_length
-        self.text_to_enum_description = dict((x['text'], x['description']) for x in enum_values)
+        self.text_to_enum_description = dict((x['text'], x.get('description', '')) for x in enum_values)
         self.text_to_enumerant = dict((x['text'], x['name']) for x in enum_values) # shorter repr of value
         self.semantic_type = semantic_type
         self.since_version = since_version
@@ -152,8 +152,9 @@ class EnumMessageField(SBEMessageField):
     def raw_value(self):
         _raw_value = unpack_from(self.unpack_fmt, self.msg_buffer,
                                  self.msg_offset + self.relative_offset + self.field_offset)[0]
+        if type(_raw_value) is bytes:
+            _raw_value = _raw_value.decode('UTF-8')
         return _raw_value
-
 
 
 class CompositeMessageField(SBEMessageField):
@@ -192,7 +193,7 @@ class CompositeMessageField(SBEMessageField):
             mantissa = _raw_value.get('mantissa', None)
             exponent = _raw_value.get('exponent', None)
             if mantissa is None or exponent is None:
-                return None 
+                return None
             return float(mantissa) * math.pow(10, exponent)
 
         return self.raw_value
@@ -233,6 +234,7 @@ class SBERepeatingGroup:
             group.wrap()
             yield group
 
+
 class SBERepeatingGroupContainer(object):
     def __init__(self, name=None, original_name=None, id=None, block_length_field=None,
                  num_in_group_field=None, dimension_size=None, fields=None, groups=None,
@@ -259,13 +261,12 @@ class SBERepeatingGroupContainer(object):
         self.since_version = since_version
 
         self.dimension_size = dimension_size
-        self._repeating_groups = None
+        self._repeating_groups = []
 
     def wrap(self, msg_buffer, msg_offset, group_start_offset):
         self.msg_buffer = msg_buffer
         self.msg_offset = msg_offset
         self.group_start_offset = group_start_offset
-
         self.block_length_field.wrap(msg_buffer, msg_offset, relative_offset=group_start_offset)
         self.num_in_group_field.wrap(msg_buffer, msg_offset, relative_offset=group_start_offset)
         block_length = self.block_length_field.value
@@ -278,7 +279,12 @@ class SBERepeatingGroupContainer(object):
         repeated_group_offset = group_start_offset + self.dimension_size
         nested_groups_length = 0
         for i in range(num_instances):
-            repeated_group = SBERepeatingGroup(msg_buffer, msg_offset, repeated_group_offset + nested_groups_length, self.name, self.original_name, self.fields)
+            repeated_group = SBERepeatingGroup(msg_buffer,
+                                               msg_offset,
+                                               repeated_group_offset + nested_groups_length,
+                                               self.name,
+                                               self.original_name,
+                                               self.fields)
             self._repeating_groups.append(repeated_group)
             repeated_group_offset += block_length
             # now account for any nested groups
@@ -307,12 +313,23 @@ class SBERepeatingGroupContainer(object):
         return group
 
 
-
 class SBEMessage(object):
     def __init__(self):
         self.name = self.__class__.__name__
         self.msg_buffer = None
         self.msg_offset = None
+
+    @staticmethod
+    def parse_message(schema, msg_buffer, offset=0):
+        """ Return a message by parsing a msg_buffer with the specified schema """
+        template_id_offset = 2  # the 2 byte BlockHeader that starts all SBE Messages
+        if schema.include_message_size_header:
+            template_id_offset = 4  # Include a two byte message header (i.e for CME MDP)
+        template_id = unpack_from('<H', msg_buffer, offset + template_id_offset)[0]
+        message_type = schema.get_message_type(template_id)
+        message = message_type()
+        message.wrap(msg_buffer, offset)
+        return message
 
     def wrap(self, msg_buffer, msg_offset):
         # Wrap the fields for decoding
@@ -321,7 +338,7 @@ class SBEMessage(object):
 
         message_version = 0
         for field in self.fields:
-            if message_version > 0 and field.since_version > message_version:
+            if field.since_version > message_version > 0:
                 continue
             field.wrap(msg_buffer, msg_offset)
             if field.name == 'version': # as we're iterating fields, save the version, which comes early as part of header
@@ -341,10 +358,22 @@ class SBEMessageFactory(object):
     def __init__(self, schema):
         self.schema = schema
 
+    # This should return a tuple of (message, message_size)
     def build(self, msg_buffer, offset):
-        # Peek at the template id to figure out what class to build
+        raise NotImplementedError()
+
+
+class MDPMessageFactory(SBEMessageFactory):
+    def __init__(self, schema):
+        super(MDPMessageFactory, self).__init__(schema)
+
+    def build(self, msg_buffer, offset):
+        # Peek at the template id to figure out what class to build.
+        # This looks past the starting 2 byte MsgSize header that is CME specific
+        # and the 2 byte BlockLength that starts all SBE Messages:
+        #   https://www.cmegroup.com/confluence/display/EPICSANDBOX/MDP+3.0+-+Message+Header
         template_id = unpack_from('<H', msg_buffer, offset+4)[0]
         message_type = self.schema.get_message_type(template_id)
         message = message_type()
         message.wrap(msg_buffer, offset)
-        return message
+        return message, message.message_size.value

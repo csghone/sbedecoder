@@ -16,8 +16,8 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-env/
-venv/
+env*/
+venv*/
 pypy-env/
 pypy-venv/
 build/
@@ -54,6 +54,8 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *,cover
+
+.pytest_cache/
 
 # Translations
 *.mo
