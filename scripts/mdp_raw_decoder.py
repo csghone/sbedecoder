@@ -100,7 +100,7 @@ class MDP3Parser:
             )
 
 
-    def parse_packet(self, data, skip_fields=[], token_filter=[], enable_trade_only=False):
+    def parse_packet(self, data, skip_fields=[], token_filter=None, enable_trade_only=False):
         seq_num_str = ":packet => sequence_number: {} sending_time: {} size: {}"
         # Parse the packet header:
         # http://www.cmegroup.com/confluence/display/EPICSANDBOX/MDP+3.0+-+Binary+Packet+Header
@@ -113,12 +113,11 @@ class MDP3Parser:
         sequence_number = unpack_from("<i", data, offset=0)[0]
         sending_time = unpack_from("<Q", data, offset=4)[0]
 
-        print("=" * 90, file=self.out_file_handle)
-        print(seq_num_str.format(sequence_number, sending_time, len(data)),
-              file=self.out_file_handle)
         template_id_filter = [32, 42, 43]
         if self.ignore_messages:
             return
+
+        header_done = False
         for mdp_message in self.mdp_parser.parse(data, offset=12):
             global GLOBAL_MESSAGE_COUNT
             GLOBAL_MESSAGE_COUNT += 1
@@ -130,10 +129,13 @@ class MDP3Parser:
             if not enable_trade_only:
                 checker = True
             if enable_trade_only:
-                for md_entry in mdp_message.no_md_entries:
-                    security_id = md_entry.security_id.value
-                    if token_filter is not None and security_id in token_filter:
-                        checker = True
+                if token_filter is None:
+                    checker = True
+                else:
+                    for md_entry in mdp_message.no_md_entries:
+                        security_id = md_entry.security_id.value
+                        if security_id in token_filter:
+                            checker = True
 
             message_fields = ""
             for field in mdp_message.fields:
@@ -142,6 +144,12 @@ class MDP3Parser:
 
             if not checker:
                 continue
+
+            if not header_done:
+                print("=" * 90, file=self.out_file_handle)
+                print(seq_num_str.format(sequence_number, sending_time, len(data)),
+                    file=self.out_file_handle)
+                header_done = True
 
             print("-" * 90, file=self.out_file_handle)
             print("::{} -{}".format(mdp_message, message_fields),
@@ -183,10 +191,6 @@ def process_raw_file(args):
     filename = args.input_file
 
     skip_fields = args.skip_fields.split(',')
-    token_filter = args.token_filter.split(',')
-    if token_filter == [""]:
-        token_filter = []
-    token_filter = [int(x) for x in token_filter]
 
     if filename.endswith(".gz"):
         file_handle = gzip.open(filename, "rb")
@@ -234,7 +238,8 @@ def process_raw_file(args):
             try:
                 mdp3_parser.parse_packet(chunk,
                                          skip_fields=skip_fields,
-                                         token_filter=token_filter)
+                                         token_filter=args.token_filter,
+                                         enable_trade_only=args.enable_trade_only)
             except Exception as error:
                 exc_mesg = traceback.format_exc()
                 logger.error("\n%s", exc_mesg)
@@ -258,9 +263,6 @@ def process_pcap_file(args):
     ret_val = 0
     filename = args.input_file
     skip_fields = args.skip_fields.split(',')
-    token_filter = args.token_filter.split(',')
-    if token_filter == [""]:
-        token_filter = []
     if args.output_file == "-":
         out_file_handle = sys.stdout
     else:
@@ -295,7 +297,8 @@ def process_pcap_file(args):
                 try:
                     mdp3_parser.parse_packet(udp.data,
                                              skip_fields=skip_fields,
-                                             token_filter=token_filter)
+                                             token_filter=token_filter,
+                                             enable_trade_only=args.enable_trade_only)
                 except Exception as error:
                     exc_mesg = traceback.format_exc()
                     logger.error("\n%s", exc_mesg)
@@ -363,8 +366,18 @@ def process_command_line():
     parser.add_argument(
         "--token_filter",
         dest="token_filter",
-        default="",
-        help="comma separated list of venue tokens to use. Default: all"
+        nargs="+",
+        help="Specify venue_token / security_id to filter out. Default - all contracts are used",
+        type=int,
+        default=None
+    )
+
+    parser.add_argument(
+        "--enable_trade_only",
+        dest="enable_trade_only",
+        action="store_true",
+        help="Only log trades",
+        default=False
     )
 
     parser.add_argument(
