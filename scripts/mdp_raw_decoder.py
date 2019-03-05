@@ -113,7 +113,7 @@ class MDP3Parser:
         sequence_number = unpack_from("<i", data, offset=0)[0]
         sending_time = unpack_from("<Q", data, offset=4)[0]
 
-        template_id_filter = [32, 42, 43]
+        template_id_filter = [32, 42, 43, 47, 48]
         if self.ignore_messages:
             return
 
