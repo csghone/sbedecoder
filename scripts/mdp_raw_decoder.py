@@ -113,7 +113,11 @@ class MDP3Parser:
         sequence_number = unpack_from("<i", data, offset=0)[0]
         sending_time = unpack_from("<Q", data, offset=4)[0]
 
-        template_id_filter = [32, 42, 43, 47, 48]
+        # 32 -> 46 -> MDIncrementalRefreshBook
+        # 43 -> 47 -> MDIncrementalRefreshOrderBook
+        # 37 -> 37 -> MDIncrementalRefreshVolume
+        # 42 -> 48 -> MDIncrementalRefreshTradeSummary
+        template_id_filter = [37, 42, 48]
         if self.ignore_messages:
             return
 
@@ -297,7 +301,7 @@ def process_pcap_file(args):
                 try:
                     mdp3_parser.parse_packet(udp.data,
                                              skip_fields=skip_fields,
-                                             token_filter=token_filter,
+                                             token_filter=args.token_filter,
                                              enable_trade_only=args.enable_trade_only)
                 except Exception as error:
                     exc_mesg = traceback.format_exc()
