@@ -16,6 +16,8 @@ from datetime import datetime
 from sbedecoder import MDPSchema
 from sbedecoder import MDPMessageFactory
 from sbedecoder import SBEParser
+import mdp.secdef
+
 import gzip
 import dpkt
 import logging
@@ -100,7 +102,7 @@ class MDP3Parser:
             )
 
 
-    def parse_packet(self, data, skip_fields=[], token_filter=None, enable_trade_only=False):
+    def parse_packet(self, data, skip_fields=[], token_filter=None, enable_trade_only=False, secdef=None):
         seq_num_str = ":packet => sequence_number: {} sending_time: {} size: {}"
         # Parse the packet header:
         # http://www.cmegroup.com/confluence/display/EPICSANDBOX/MDP+3.0+-+Binary+Packet+Header
@@ -184,10 +186,20 @@ class MDP3Parser:
                     mdp_message.version.value,
                     indent="::::",
                     skip_fields=skip_fields,
-                    secdef=None
+                    secdef=secdef
                 )
                 continue
 
+
+def get_secdef(secdef_file):
+    if secdef_file is None:
+        return None
+    print("Parsing Secdef...")
+    secdef = mdp.secdef.SecDef()
+    secdef.load(secdef_file)
+    print("Done")
+
+    return secdef
 
 
 def process_raw_file(args):
@@ -195,6 +207,7 @@ def process_raw_file(args):
     filename = args.input_file
 
     skip_fields = args.skip_fields.split(',')
+    secdef = get_secdef(args.secdef_file)
 
     if filename.endswith(".gz"):
         file_handle = gzip.open(filename, "rb")
@@ -243,7 +256,8 @@ def process_raw_file(args):
                 mdp3_parser.parse_packet(chunk,
                                          skip_fields=skip_fields,
                                          token_filter=args.token_filter,
-                                         enable_trade_only=args.enable_trade_only)
+                                         enable_trade_only=args.enable_trade_only,
+                                         secdef=secdef)
             except Exception as error:
                 exc_mesg = traceback.format_exc()
                 logger.error("\n%s", exc_mesg)
@@ -263,10 +277,13 @@ def process_raw_file(args):
     file_handle.close()
     return ret_val
 
+
 def process_pcap_file(args):
     ret_val = 0
     filename = args.input_file
     skip_fields = args.skip_fields.split(',')
+    secdef = get_secdef(args.secdef_file)
+
     if args.output_file == "-":
         out_file_handle = sys.stdout
     else:
@@ -302,7 +319,8 @@ def process_pcap_file(args):
                     mdp3_parser.parse_packet(udp.data,
                                              skip_fields=skip_fields,
                                              token_filter=args.token_filter,
-                                             enable_trade_only=args.enable_trade_only)
+                                             enable_trade_only=args.enable_trade_only,
+                                             secdef=secdef)
                 except Exception as error:
                     exc_mesg = traceback.format_exc()
                     logger.error("\n%s", exc_mesg)
@@ -399,6 +417,14 @@ def process_command_line():
         action="store_true",
         help="For quick analysis, skip message parsing",
         default=False
+    )
+
+    parser.add_argument(
+        "--secdef_file",
+        dest="secdef_file",
+        type=str,
+        help="Input secdef file",
+        default=None
     )
 
     args = parser.parse_args()
